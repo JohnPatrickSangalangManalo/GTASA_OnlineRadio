@@ -3,25 +3,22 @@
 #include <mod/config.h>
 
 #include <thread>
-#include <cmath>
 
 #include <Events.h>
 #include <engine/RsGlobal.h>
 #include <base/Timer.h>
 
+#include <entity/PlayerPed.h>
+
 #include "ibass.h"
 IBASS* BASS = nullptr;
 
-#include "isautils.h"
-ISAUtils* sautils = nullptr;
-
-MYMODCFG(net.rusjj.gtasa.onlineradio, GTA:SA Online Radio IMGUI, 2.0, RusJJ)
+MYMODCFG(net.rusjj.gtasa.onlineradio, GTA:SA Online Radio IMGUI AutoUI, 2.1, RusJJ)
 NEEDGAME(com.rockstargames.gtasa)
 
 #define MAX_RADIOS 32
 
 uintptr_t pGTASA = 0;
-void* hGTASA = NULL;
 
 // ================= CONFIG =================
 ConfigEntry* pCurrentRadioIndex;
@@ -32,12 +29,11 @@ const char** pRadioNames;
 
 int nRadiosCount = 0;
 int nRadioIndex = 0;
-uint32_t pCurrentRadio = 0;
 
+uint32_t pCurrentRadio = 0;
 bool bRadioPlaying = false;
 
-// ================= IMGUI SAFETY =================
-// Prevent compile crash if ImGui is missing
+// ================= IMGUI GUARD =================
 #ifdef IMGUI_VERSION
 #include <imgui.h>
 #define HAS_IMGUI 1
@@ -45,9 +41,39 @@ bool bRadioPlaying = false;
 #define HAS_IMGUI 0
 #endif
 
-bool g_showUI = true;
+// ================= UI STATE =================
+bool g_showUI = false;
+uintptr_t g_lastVehicle = 0;
 
-// ================= PLAYBACK =================
+// ================= VEHICLE CHECK =================
+uintptr_t GetVehicle()
+{
+    CPed* player = FindPlayerPed(-1);
+    if(!player) return 0;
+
+    return player->m_pVehicle ? (uintptr_t)player->m_pVehicle : 0;
+}
+
+void CheckVehicleState()
+{
+    uintptr_t veh = GetVehicle();
+
+    // ENTER VEHICLE
+    if(veh && !g_lastVehicle)
+    {
+        g_showUI = true;
+    }
+
+    // EXIT VEHICLE
+    if(!veh && g_lastVehicle)
+    {
+        g_showUI = false;
+    }
+
+    g_lastVehicle = veh;
+}
+
+// ================= RADIO CONTROL =================
 void PlayStation(int index)
 {
     if(index < 0 || index >= nRadiosCount) return;
@@ -85,39 +111,8 @@ void PlayStation(int index)
     }
 }
 
-void NextStation()
-{
-    PlayStation((nRadioIndex + 1) % nRadiosCount);
-}
-
-void PrevStation()
-{
-    PlayStation((nRadioIndex - 1 + nRadiosCount) % nRadiosCount);
-}
-
-// ================= VOLUME CALLBACK (FIXED) =================
-void SetVolume(int oldVal, int newVal, void* data)
-{
-    if(pCurrentRadio)
-        BASS->ChannelSetAttribute(pCurrentRadio, BASS_ATTRIB_VOL, 0.005f * newVal);
-
-    pRadioVolume->SetInt(newVal);
-    cfg->Save();
-}
-
-// ================= SAFE VEHICLE CHECK =================
-#include <entity/PlayerPed.h>
-
-uintptr_t GetPlayerVeh()
-{
-    CPed* player = FindPlayerPed(-1);
-    if(!player) return 0;
-
-    if(player->m_pVehicle)
-        return (uintptr_t)player->m_pVehicle;
-
-    return 0;
-}
+void NextStation() { PlayStation((nRadioIndex + 1) % nRadiosCount); }
+void PrevStation() { PlayStation((nRadioIndex - 1 + nRadiosCount) % nRadiosCount); }
 
 // ================= IMGUI UI =================
 void DrawUI()
@@ -145,70 +140,39 @@ void DrawUI()
 
     if(ImGui::Button("⏮ Prev")) PrevStation();
     ImGui::SameLine();
+
     if(ImGui::Button(bRadioPlaying ? "⏸ Pause" : "▶ Play"))
-    {
-        if(bRadioPlaying && pCurrentRadio)
-        {
-            BASS->ChannelPause(pCurrentRadio);
-            bRadioPlaying = false;
-        }
-        else
-        {
-            PlayStation(nRadioIndex);
-        }
-    }
+        PlayStation(nRadioIndex);
+
     ImGui::SameLine();
+
     if(ImGui::Button("⏭ Next")) NextStation();
 
     ImGui::Separator();
 
     int vol = pRadioVolume->GetInt();
     if(ImGui::SliderInt("Volume", &vol, 0, 100))
-        SetVolume(pRadioVolume->GetInt(), vol, nullptr);
+    {
+        pRadioVolume->SetInt(vol);
+        if(pCurrentRadio)
+            BASS->ChannelSetAttribute(pCurrentRadio, BASS_ATTRIB_VOL, 0.005f * vol);
 
-    ImGui::Text("Status: %s", bRadioPlaying ? "Playing" : "Stopped");
+        cfg->Save();
+    }
+
+    if(ImGui::Button("Close"))
+        g_showUI = false;
 
     ImGui::End();
 #endif
 }
 
-// ================= RADIO THREAD =================
-void StartRadioThread()
-{
-    PlayStation(nRadioIndex);
-}
-
-// ================= HOOKS =================
-DECL_HOOK(void, StartRadio, uintptr_t self, uintptr_t vehicleInfo)
-{
-    if(GetPlayerVeh() != 0)
-        std::thread(StartRadioThread).detach();
-
-    StartRadio(self, vehicleInfo);
-}
-
-DECL_HOOK(void, StopRadio, uintptr_t self, uintptr_t vehicleInfo, unsigned char flag)
-{
-    if(pCurrentRadio)
-    {
-        BASS->ChannelStop(pCurrentRadio);
-        BASS->StreamFree(pCurrentRadio);
-        pCurrentRadio = 0;
-    }
-
-    bRadioPlaying = false;
-
-    StopRadio(self, vehicleInfo, flag);
-}
-
-// ================= MOD LOAD =================
+// ================= HOOK UPDATE =================
 ON_MOD_LOAD()
 {
     pGTASA = aml->GetLib("libGTASA.so");
-    hGTASA = aml->GetLibHandle("libGTASA.so");
 
     BASS = (IBASS*)GetInterface("BASS");
-    sautils = (ISAUtils*)GetInterface("SAUtils");
 
     pCurrentRadioIndex = cfg->Bind("CurrentRadioIndex", 0);
     pRadioVolume = cfg->Bind("RadioVolume", 80);
@@ -233,6 +197,7 @@ ON_MOD_LOAD()
 
     Events::drawHudEvent.after += []()
     {
+        CheckVehicleState();
         DrawUI();
     };
 }
