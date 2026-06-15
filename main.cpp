@@ -92,6 +92,8 @@ void VolumeChanged(int oldVal, int newVal, void* data)
 // Function to update the radio stream
 static char szNewText[0xFF];
 bool bRadioPending = false;
+int retryCount = 0;
+const int maxRetries = 3;
 void DoRadio()
 {
     if(bRadioPending) return;
@@ -101,37 +103,61 @@ void DoRadio()
     if(nRadioIndex < 0) nRadioIndex = nRadiosCount - 1;
     if(nRadioIndex >= nRadiosCount) nRadioIndex = 0;
 
+    // Free previous stream
     if(pCurrentRadio)
     {
         BASS->ChannelStop(pCurrentRadio);
         BASS->StreamFree(pCurrentRadio);
         pCurrentRadio = 0;
     }
-    bIsRadioShouldBeRendered = true;
 
     sprintf(szNewText, "< Current radiostation >~n~%s", pRadioNames[nRadioIndex]);
     AsciiToGxtChar(szNewText, RadioGXT);
     char myIndex = nRadioIndex;
 
-    auto currentRadio = BASS->StreamCreateURL(pRadioStreams[nRadioIndex], 0, BASS_STREAM_BLOCK | BASS_STREAM_STATUS | BASS_STREAM_AUTOFREE | BASS_SAMPLE_FLOAT, 0);
-    if(currentRadio)
+    // Retry logic
+    bool streamLoaded = false;
+    for(int attempt = 0; attempt < maxRetries; ++attempt)
     {
-        if(nRadioIndex == myIndex)
+        auto stream = BASS->StreamCreateURL(pRadioStreams[nRadioIndex], 0, BASS_STREAM_BLOCK | BASS_STREAM_STATUS | BASS_STREAM_AUTOFREE | BASS_SAMPLE_FLOAT, 0);
+        if(stream)
         {
-            pCurrentRadio = currentRadio;
+            pCurrentRadio = stream;
             BASS->ChannelSetAttribute(pCurrentRadio, BASS_ATTRIB_VOL, 0.005f * pRadioVolume->GetInt());
-            if(!CTimer::IsPaused()) BASS->ChannelPlay(pCurrentRadio, true);
-            bRadioPending = false;
+            if(!CTimer::IsPaused())
+                BASS->ChannelPlay(pCurrentRadio, true);
+            streamLoaded = true;
+            break; // Exit loop if success
         }
         else
         {
-            BASS->StreamFree(currentRadio);
+            logger->Error("Attempt %d: Failed to open stream! Error Code: %d", attempt + 1, BASS->ErrorGetCode());
+            std::this_thread::sleep_for(std::chrono::seconds(1)); // wait before retry
         }
+    }
+
+    if(!streamLoaded)
+    {
+        // Failed after retries
+        // Magbago ang kulay o mag-display ng message
+        // Halimbawa: change color to red or maglagay ng message
+        // For simplicity, gamitin natin ang kulay para ipakita ang error
+        clrRadioLoading.SetRGBA(255, 0, 0, 255); // Red color indicating error
+        bIsRadioShouldBeRendered = true; // Still show UI, pero may warning
+        // Pwede ka ring maglagay ng text overlay dito para ipakita na error
+        sprintf(szNewText, "< Stream load failed >~n~%s", pRadioNames[nRadioIndex]);
+        AsciiToGxtChar(szNewText, RadioGXT);
     }
     else
     {
-        logger->Error("Failed to open stream! Error Code: %d", BASS->ErrorGetCode());
+        // Successful load
+        retryCount = 0; // reset retry counter
+        // Reset color to normal
+        clrRadioLoading.SetRGBA(255, 228, 181, 255);
+        bIsRadioShouldBeRendered = true;
     }
+
+    bRadioPending = false;
 }
 
 // Start radio hook
