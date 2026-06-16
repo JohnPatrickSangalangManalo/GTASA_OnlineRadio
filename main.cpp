@@ -227,7 +227,7 @@ ON_MOD_LOAD()
             float flScale = (float)RsGlobal.maximumHeight / 540.0f;
             CFont::SetScale(flScale);
             CFont::SetScale(flScale);
-            if(bRadioStopped)
+            if(bIsRadioStopped)
                 CFont::SetColor(clrRadioStop);
             else
                 CFont::SetColor(bIsRadioStarted ? clrRadioPlaying : clrRadioLoading);
