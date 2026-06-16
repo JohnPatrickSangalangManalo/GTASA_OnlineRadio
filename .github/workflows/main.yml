@@ -19,7 +19,7 @@ jobs:
     - name: Download AndroidModLoader`s mod template...
       uses: wei/wget@v1
       with:
-        args: -O ./AML_src.zip https://github.com/RusJJ/AndroidModLoader/archive/refs/heads/main.zip
+        args: -O ./AML_src.zip https://github.com/JohnPatrickSangalangManalo/AndroidModLoader/archive/refs/heads/main.zip
 
     - name: Install AndroidModLoader`s mod template...
       run: |
