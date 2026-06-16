@@ -10,6 +10,7 @@
 #include <dlfcn.h>
 
 #include <Events.h>
+#include <imgui.h>
 #include <engine/Font.h>
 #include <engine/RsGlobal.h>
 #include <base/Timer.h>
@@ -51,10 +52,12 @@ bool bIsRadioLoading = false;
 bool bIsRadioStopped = false;
 bool bIsRadioShouldBeRendered = false;
 GxtChar RadioGXT[256] { 0 };
+const char* RadioGXT = "Station Name";
 CRGBA clrRadioStop(128, 128, 128, 255);
 CRGBA clrRadioLoading(255, 228, 181, 255);
 CRGBA clrRadioPlaying(255, 255, 255, 255);
 CRGBA clrRadioOutline(  0,   0,   0, 255);
+bool bIsRadioOverlayOpen = false;
 
 inline time_t GetCurrentTimeS()
 {
@@ -231,51 +234,52 @@ ON_MOD_LOAD()
 
     Events::drawHudEvent.after += []()
     {
-        if(bIsRadioShouldBeRendered)
+        if (bIsRadioOverlayOpen)
         {
-            float flScale = (float)RsGlobal.maximumHeight / 540.0f;
-            CFont::SetScale(flScale);
-            CFont::SetScale(flScale);
-            if(bIsRadioStopped)
-                CFont::SetColor(clrRadioStop);
-            else
-                CFont::SetColor(bIsRadioStarted ? clrRadioPlaying : clrRadioLoading);
-            CFont::SetFontStyle(FO_FONT_STYLE_HEADING);
-            CFont::SetEdge(1);
-            CFont::SetOrientation(ALIGN_CENTER);
-            CFont::SetProportional(1);
-            CFont::SetAlphaFade(255.0f);
-            CFont::SetBackground(0, 1);
-            CFont::SetBackgroundColor(clrRadioOutline);
-            CFont::SetDropColor(clrRadioOutline);
-            CFont::SetOutlinePosition(1);
-            CFont::PrintString(0.5f * RsGlobal.maximumWidth, 0.02f * RsGlobal.maximumHeight, RadioGXT);
-            CFont::RenderFontBuffer();
-        }
-    };
-
-    Events::touchScreenEvent.after += [](int type, int finger, int x, int y)
-    {
-        if(bIsRadioShouldBeRendered && type == 2 /*TOUCH_PRESS*/)
-        {
-            if(/*!bRadioPending &&*/
-                y < (RsGlobal.maximumHeight * 0.135f) &&
-                x > (RsGlobal.maximumWidth * 0.33f) &&
-                x < (RsGlobal.maximumWidth * 0.66f) )
+            // Positon at size ng overlay
+            ImGui::SetNextWindowPos(ImVec2(RsGlobal.maximumWidth * 0.5f, RsGlobal.maximumHeight * 0.02f), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+            ImGui::SetNextWindowBgAlpha(0.0f);
+    
+            // Simulan ang ImGui window
+            ImGui::Begin("RadioStatusOverlay", nullptr, 
+                ImGuiWindowFlags_NoTitleBar | 
+                ImGuiWindowFlags_NoResize | 
+                ImGuiWindowFlags_AlwaysAutoResize | 
+                ImGuiWindowFlags_NoBackground);
+    
+            if (ImGui::Button("Close"))
             {
-                if(x > (RsGlobal.maximumWidth * 0.5f) )
-                {
-                    ++nRadioIndex;
-                }
-                else
-                {
-                    --nRadioIndex;
-                }
-                pCurrentRadioIndex->SetInt(nRadioIndex);
-                cfg->Save();
-                std::thread(DoRadio).detach();
+                bIsRadioOverlayOpen = false; 
             }
-            // No slider for y'all
+    
+            // Kulay depende sa estado
+            ImU32 textColor = IM_COL32(255, 255, 255, 255);
+            if (bIsRadioLoading)
+                textColor = IM_COL32(255, 228, 181, 255);
+            else if (bIsRadioStarted)
+                textColor = IM_COL32(255, 255, 255, 255);
+            else if (bIsRadioStopped)
+                textColor = IM_COL32(128, 128, 128, 255);
+    
+            // I-set ang kulay ng teksto
+            ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+    
+            // Ipakita ang status
+            if (bIsRadioLoading)
+                ImGui::Text("Loading Radio...");
+            else
+                ImGui::Text("%s", RadioGXT);
+    
+            ImGui::PopStyleColor();
+    
+            ImGui::End();
+        }
+        else
+        {
+            if (ImGui::Button("Online Radio"))
+            {
+                bIsRadioOverlayOpen = true;
+            }
         }
     };
 }
