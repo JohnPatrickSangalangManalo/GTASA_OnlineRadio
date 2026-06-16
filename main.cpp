@@ -119,6 +119,7 @@ void DoRadio()
         sprintf(szNewText, "< Loading radiostation >~n~%s", pRadioNames[idx]);
         AsciiToGxtChar(szNewText, RadioGXT);
         bIsRadioLoading = true;
+        bIsRadioStopped = false; 
     }
 
     auto currentRadio = BASS->StreamCreateURL(pRadioStreams[idx], 0, BASS_STREAM_BLOCK | BASS_STREAM_STATUS | BASS_STREAM_AUTOFREE | BASS_SAMPLE_FLOAT, 0);
@@ -137,6 +138,7 @@ void DoRadio()
         AsciiToGxtChar(szNewText, RadioGXT);
         bIsRadioLoading = false;
         bIsRadioStarted = true;
+        bIsRadioStopped = false; 
         if(!CTimer::IsPaused()) BASS->ChannelPlay(pCurrentRadio, true);
     }
     else
@@ -146,7 +148,8 @@ void DoRadio()
         AsciiToGxtChar(szNewText, RadioGXT);
         bIsRadioShouldBeRendered = true; 
         bIsRadioStopped = true; 
-        bIsRadioLoading = true;
+        bIsRadioLoading = false;
+        bIsRadioStarted = false;
     }
 }
 DECL_HOOK(void, StartRadio, uintptr_t self, uintptr_t vehicleInfo)
