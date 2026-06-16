@@ -47,10 +47,8 @@ const char** pRadioStreams;
 const char** pRadioNames;
 char nRadiosCount, nRadioIndex;
 bool bIsRadioStarted = false;
-bool bIsRadioStopped = false;
 bool bIsRadioShouldBeRendered = false;
 GxtChar RadioGXT[256] { 0 };
-CRGBA clrRadioStop(128, 128, 128, 255);
 CRGBA clrRadioLoading(255, 228, 181, 255);
 CRGBA clrRadioPlaying(255, 255, 255, 255);
 CRGBA clrRadioOutline(  0,   0,   0, 255);
@@ -137,10 +135,6 @@ void DoRadio()
     else
     {
         logger->Error("Failed to open stream! Error Code: %d", BASS->ErrorGetCode());
-        sprintf(szNewText, "< Radio stream failed >");
-        AsciiToGxtChar(szNewText, RadioGXT);
-        bIsRadioShouldBeRendered = true; 
-        bIsRadioStopped = true; 
     }
 }
 DECL_HOOK(void, StartRadio, uintptr_t self, uintptr_t vehicleInfo)
@@ -225,11 +219,7 @@ ON_MOD_LOAD()
         {
             float flScale = (float)RsGlobal.maximumHeight / 540.0f;
             CFont::SetScale(flScale);
-            CFont::SetScale(flScale);
-            if(bIsRadioStopped)
-                CFont::SetColor(clrRadioStop);
-            else
-                CFont::SetColor(bIsRadioStarted ? clrRadioPlaying : clrRadioLoading);
+            CFont::SetColor(bIsRadioStarted ? clrRadioPlaying : clrRadioLoading);
             CFont::SetFontStyle(FO_FONT_STYLE_HEADING);
             CFont::SetEdge(1);
             CFont::SetOrientation(ALIGN_CENTER);
